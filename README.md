@@ -13,7 +13,7 @@ The project is designed to simulate an **AI data pipeline** for a company like *
 - Prepare for automated deployments with Infrastructure-as-Code (Terraform).
 
 ### **Architecture Diagram**
-![Fuel.AI Architecture](diagrams/fuelaidiagram.png)
+![Fuel.AI Architecture](fuelaidiagram.png)
 
 ---
 
