@@ -289,6 +289,81 @@ terraform apply
 All steps were completed on a Linux machine. The GCP infrastructure now mirrors the Azure environment and supports Fuel.AI's objective of building a secure, multi-cloud foundation for AI dataset management and model training pipelines.
 
 
+On Day 4 of the Fuel.AI Cloud Infrastructure Project, the goal was to simulate a real-time, cross-cloud data pipeline from GKE (Google Cloud) to AKS (Azure). The GKE cluster would run a synthetic data-producing pod (data-source), while the AKS cluster would host a public-facing nginx service (data-processor) to receive incoming HTTP requests. This test mimics an anonymized data ingestion scenario in a multi-cloud AI pipeline.
+
+The simulation began by setting the kubectl context to Azure using:
+kubectl config use-context aks-fuelai
+
+A namespace was created to organize workloads:
+kubectl create namespace pipeline
+
+An nginx pod was deployed:
+kubectl create deployment data-processor --image=nginx -n pipeline
+
+The deployment was exposed via a public LoadBalancer:
+kubectl expose deployment data-processor --port=80 --type=LoadBalancer -n pipeline
+
+The service’s external IP was retrieved:
+kubectl get svc -n pipeline
+
+Output:
+NAME             TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)        AGE  
+data-processor   LoadBalancer   10.0.128.145    13.91.67.194    80:32160/TCP   5m
+
+To verify reachability, a curl request was made from the local machine:
+curl http://13.91.67.194
+
+This returned the default nginx welcome page, confirming that the Azure LoadBalancer was online and externally accessible.
+
+The kubectl context was then switched to GKE:
+kubectl config use-context gke-fuelai
+
+The same namespace was created in GKE:
+kubectl create namespace pipeline
+
+Next, a busybox pod was launched to simulate a data source:
+kubectl run data-source --image=busybox --restart=Never --namespace=pipeline --command -- sh -c 'while true; do echo "{\"timestamp\": \"$(date)\", \"value\": $RANDOM}" >> /data/stream.log; sleep 3; done'
+
+The connection to the AKS LoadBalancer was tested:
+kubectl exec -n pipeline data-source -- wget -qO- http://13.91.67.194
+
+Output:
+<!DOCTYPE html>
+<html>
+<head><title>Welcome to nginx!</title></head>
+<body><h1>Welcome to nginx!</h1></body>
+</html>
+
+This confirmed that GKE could reach AKS over the public IP. A looped simulation of continuous data stream was then launched:
+kubectl exec -n pipeline data-source -- sh -c 'while true; do wget -qO- http://13.91.67.194; sleep 5; done'
+
+This command simulated repeated HTTP requests from the GKE pod to the AKS endpoint every 5 seconds.
+
+During this simulation, multiple errors were encountered and resolved:
+
+Error: pods "data-source" not found  
+Fix: The pod had not been created in the current context. Resolved by switching to gke-fuelai and recreating the pod.
+
+Error: sh: syntax error: unexpected ";"  
+Fix: Caused by malformed shell syntax and improper use of angle brackets. Resolved by quoting the full command correctly and using the actual IP address instead of placeholders.
+
+Error: wget: can't connect to remote host  
+Fix: This occurred while the AKS LoadBalancer IP was still being provisioned. Resolved by waiting a few minutes and confirming that the nginx pod was in Running state.
+
+Error: no context exists with the name "aks-fuelai"  
+Fix: The context was renamed for clarity using:
+kubectl config rename-context fuelai-aks aks-fuelai  
+kubectl config rename-context gke_neural-period-467301-t9_us-west2_fuelai-gke gke-fuelai
+
+All steps were run from a Linux machine. Context switching between clusters was verified multiple times using:
+kubectl config get-contexts  
+kubectl config use-context <context-name>
+
+The entire cross-cloud flow was confirmed to be working by checking responses from both curl and wget. This validated that live workloads in GKE could reach Azure-based services over HTTP in a stable and repeatable way. The simulation confirmed that Terraform-built infrastructure in both clouds was functioning as designed, and that multi-cloud AI pipelines are feasible and reliable using this architecture.
+
+This concludes Day 4 of the project, with a working, observable multi-cloud data pipeline from GCP to Azure.
+
+
 
 ---
 
